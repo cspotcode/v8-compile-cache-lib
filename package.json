@@ -1,5 +1,5 @@
 {
-  "name": "v8-compile-cache",
+  "name": "v8-compile-cache-lib",
   "version": "2.3.0",
   "description": "Require hook for automatic V8 compile cache persistence",
   "main": "v8-compile-cache.js",
@@ -10,12 +10,13 @@
     "test": "npm run tap",
     "posttest": "npm run eslint"
   },
-  "author": "Andres Suarez <zertosh@gmail.com>",
+  "author": "Andrew Bradley <cspotcode@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/zertosh/v8-compile-cache.git"
+    "url": "https://github.com/cspotcode/v8-compile-cache-lib.git"
   },
   "files": [
+    "v8-compile-cache.d.ts",
     "v8-compile-cache.js"
   ],
   "license": "MIT",

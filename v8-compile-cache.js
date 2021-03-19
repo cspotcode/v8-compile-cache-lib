@@ -152,7 +152,10 @@ class NativeCompileCache {
     const self = this;
     const hasRequireResolvePaths = typeof require.resolve.paths === 'function';
     this._previousModuleCompile = Module.prototype._compile;
-    Module.prototype._compile = function(content, filename) {
+    Module.prototype._compile = this._ownModuleCompile = _ownModuleCompile;
+    self.enabled = true;
+    function _ownModuleCompile(content, filename) {
+      if(!self.enabled) return this._previousModuleCompile.apply(this, arguments);
       const mod = this;
 
       function require(id) {
@@ -190,11 +193,15 @@ class NativeCompileCache {
       // See https://github.com/zertosh/v8-compile-cache/pull/10#issuecomment-518042543
       const args = [mod.exports, require, mod, filename, dirname, process, global, Buffer];
       return compiledWrapper.apply(mod.exports, args);
-    };
+    }
   }
 
   uninstall() {
-    Module.prototype._compile = this._previousModuleCompile;
+    this.enabled = false;
+    // If something else has since been installed on top of us, we cannot overwrite it.
+    if(Module.prototype._compile === this._ownModuleCompile) {
+      Module.prototype._compile = this._previousModuleCompile;
+    }
   }
 
   _moduleCompile(filename, content) {
@@ -339,26 +346,38 @@ function getMainName() {
   return mainName;
 }
 
+function install(opts) {
+  if (!process.env.DISABLE_V8_COMPILE_CACHE && supportsCachedData()) {
+    if(typeof opts === 'undefined') opts = {}
+    let cacheDir = opts.cacheDir
+    if(typeof cacheDir === 'undefined') cacheDir = getCacheDir();
+    let prefix = opts.prefix
+    if(typeof prefix === 'undefined') prefix = getMainName();
+    const blobStore = new FileSystemBlobStore(cacheDir, prefix);
+
+    const nativeCompileCache = new NativeCompileCache();
+    nativeCompileCache.setCacheStore(blobStore);
+    nativeCompileCache.install();
+
+    let uninstalled = false;
+    const uninstall = () => {
+      if(uninstalled) return;
+      uninstalled = true;
+      if (blobStore.isDirty()) {
+        blobStore.save();
+      }
+      nativeCompileCache.uninstall();
+    }
+    process.once('exit', uninstall);
+    return {uninstall};
+  }
+}
+
 //------------------------------------------------------------------------------
 // main
 //------------------------------------------------------------------------------
 
-if (!process.env.DISABLE_V8_COMPILE_CACHE && supportsCachedData()) {
-  const cacheDir = getCacheDir();
-  const prefix = getMainName();
-  const blobStore = new FileSystemBlobStore(cacheDir, prefix);
-
-  const nativeCompileCache = new NativeCompileCache();
-  nativeCompileCache.setCacheStore(blobStore);
-  nativeCompileCache.install();
-
-  process.once('exit', () => {
-    if (blobStore.isDirty()) {
-      blobStore.save();
-    }
-    nativeCompileCache.uninstall();
-  });
-}
+module.exports.install = install;
 
 module.exports.__TEST__ = {
   FileSystemBlobStore,
